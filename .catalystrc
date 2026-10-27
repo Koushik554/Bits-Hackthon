@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "102860000000013050",
+      "name": "Bits-hackthon",
+      "domain": {
+        "id": "50047157673",
+        "name": "bits-hackthon-60093274698.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60093274698",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MicroGrid Control | Smart Energy Demand Forecasting</title>
+  <meta name="description" content="Smart energy microgrid dashboard: 24-hour demand forecast, grid mode switching, battery state of charge and overload alerts." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg: #08090d; --panel: #0f1117; --panel-2: #141722; --border: #1f2330;
+      --text: #f2f4f8; --muted: #8a90a2; --blue: #2f6bff; --green: #22c55e;
+      --amber: #f59e0b; --red: #ef4444; --pink: #ec4899; --violet: #8b5cf6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    [x-cloak] { display: none !important; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; overflow-x: hidden; }
+
+    /* Sidebar */
+    aside { width: 236px; background: var(--panel); border-right: 1px solid var(--border); padding: 22px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; flex-shrink: 0; }
+    .logo { font-weight: 700; letter-spacing: .18em; font-size: 13px; padding: 4px 10px 22px; display: flex; align-items: center; gap: 8px; }
+    .logo i { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--blue), var(--violet)); display: inline-block; }
+    nav a { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500; margin-bottom: 4px; transition: color .2s, background .2s, transform .2s; cursor: pointer; }
+    nav a:hover { background: var(--panel-2); color: var(--text); transform: translateX(3px); }
+    nav a.active { background: var(--blue); color: #fff; box-shadow: 0 6px 20px rgba(47,107,255,.35); }
+    nav a .pill { margin-left: auto; background: rgba(239,68,68,.16); border: 1px solid rgba(239,68,68,.35); color: #fca5a5; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
+    nav a .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; animation: pulse-dot 1.5s infinite; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+    nav a.active .pill { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.3); color: #fff; }
+    nav a.active .pill-dot { background: #fff; }
+    .side-foot { margin-top: auto; font-size: 11px; color: var(--muted); padding: 10px; border: 1px dashed var(--border); border-radius: 10px; line-height: 1.5; }
+
+    /* Main Content */
+    main { flex: 1; padding: 26px 30px 40px; min-width: 0; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    h1 { font-size: 24px; font-weight: 600; }
+    .sub { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+    .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 8px; font: 500 12.5px 'Inter'; cursor: pointer; transition: .2s; }
+    .btn:hover { border-color: var(--blue); transform: translateY(-1px); }
+    .btn.primary { background: var(--blue); border-color: var(--blue); }
+    input.btn, select.btn { outline: none; }
+    #status { color: var(--muted); font-size: 12px; }
+
+    /* Alert Banner */
+    .banner { display: flex; align-items: center; gap: 12px; background: linear-gradient(90deg, rgba(239,68,68,.22), rgba(239,68,68,.06)); border: 1px solid rgba(239,68,68,.55); color: #ffd5d5; padding: 12px 16px; border-radius: 12px; margin-bottom: 18px; font-size: 13.5px; font-weight: 500; animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(239,68,68,.12); } }
+
+    /* Grids & Cards */
+    .grid { display: grid; gap: 16px; margin-bottom: 16px; }
+    .kpis { grid-template-columns: repeat(4, 1fr); }
+    .two { grid-template-columns: 1.6fr 1fr; }
+    .three { grid-template-columns: repeat(3, 1fr); }
+    .even { grid-template-columns: 1fr 1fr; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; transition: border-color .25s, transform .25s; position: relative; }
+    .card:hover { border-color: #2c3350; }
+    .card h3 { font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+    .card .hint { color: var(--muted); font-size: 11.5px; margin: 3px 0 12px; }
+    
+    /* CSS Card Animation - Bulletproof: Never gets stuck at opacity 0 */
+    @keyframes cardEnter {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .anim {
+      animation: cardEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .kpis > .anim:nth-child(1) { animation-delay: 0.03s; }
+    .kpis > .anim:nth-child(2) { animation-delay: 0.06s; }
+    .kpis > .anim:nth-child(3) { animation-delay: 0.09s; }
+    .kpis > .anim:nth-child(4) { animation-delay: 0.12s; }
+
+    /* KPI styles */
+    .kpi .label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .kpi .value { font-size: 26px; font-weight: 600; margin: 8px 0 4px; letter-spacing: -.02em; }
+    .kpi .delta { font-size: 11.5px; color: var(--muted); }
+    
+    /* Chart Container */
+    .chart-box { position: relative; height: 310px; }
+    .chart-box.small { height: 250px; }
+
+    /* Peak item rows */
+    .peak-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .peak-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; }
+    .peak-time { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+    .peak-time span { color: var(--muted); font-size: 11.5px; }
+    .peak-val { display: flex; align-items: center; gap: 10px; }
+    .peak-kw { font-weight: 700; color: #fff; }
+    .peak-over { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: rgba(239,68,68,.18); color: #fca5a5; font-weight: 600; }
+    
+    /* Card summary footer */
+    .card-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .sum-box { background: rgba(20,23,34,.6); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+    .sum-box .sum-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .sum-box .sum-val { font-size: 13px; font-weight: 600; margin-top: 2px; }
+
+    /* Status & Gauge Cards (Row 3) */
+    .status-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+    .badge-storage { background: rgba(34,197,94,.15); border: 1px solid rgba(34,197,94,.35); color: #86efac; }
+    .badge-grid { background: rgba(47,107,255,.15); border: 1px solid rgba(47,107,255,.35); color: #93c5fd; }
+    .status-pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse-dot 1.2s infinite; }
+    .metric-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 6px 0; }
+    .metric-row b { color: var(--text); }
+    .progress-bar { width: 100%; height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; margin: 10px 0; }
+    .progress-fill { height: 100%; border-radius: 999px; transition: width .5s ease; }
+
+    /* Tables & Badges */
+    .table-wrap { max-height: 520px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; position: sticky; top: 0; background: var(--panel); }
+    td { padding: 9px 10px; border-top: 1px solid var(--border); }
+    tr:hover td { background: var(--panel-2); }
+    .badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .b-grid { background: rgba(47,107,255,.15); color: #7fa4ff; }
+    .b-store { background: rgba(34,197,94,.15); color: #6ee79b; }
+    .b-alert { background: rgba(239,68,68,.18); color: #ff8d8d; }
+    .b-ok { background: rgba(138,144,162,.12); color: var(--muted); }
+    .bar { width: 90px; height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+    .bar i { display: block; height: 100%; border-radius: 4px; }
+
+    .strip { display: grid; grid-template-columns: repeat(24, 1fr); gap: 4px; }
+    .strip div { height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; cursor: default; transition: transform .2s; }
+    .strip div:hover { transform: scaleY(1.15); }
+    .rule { list-style: none; font-size: 13px; line-height: 1.9; color: #c9cedb; }
+    .rule b { color: var(--text); }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+
+    .page { will-change: transform, opacity; animation: pageFade 0.25s ease-out both; }
+    @keyframes pageFade { from { opacity: 0.6; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 1100px) {
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .two, .three, .even { grid-template-columns: 1fr; }
+      aside { display: none; }
+    }
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <aside>
+    <div class="logo"><i></i> MICROGRID</div>
+    <nav>
+      <template x-for="p in pages" :key="p.id">
+        <a :class="{active: route === p.id}" :href="'#/' + p.id" @click.prevent="go(p.id)">
+          <span x-text="p.icon"></span> <span x-text="p.label"></span>
+          <span class="pill" x-show="p.id === 'overview' && data && data.overload_count > 0">
+            <span class="pill-dot"></span>
+            <span x-text="data && data.overload_count + ' Alert' + (data.overload_count > 1 ? 's' : '')"></span>
+          </span>
+        </a>
+      </template>
+    </nav>
+    <div class="side-foot">Rules: demand &gt; 160 kW or hours 18–22 → Storage. ≥ 200 kW → overload alert.</div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <h1 x-text="current.title"></h1>
+        <p class="sub" x-text="current.sub"></p>
+      </div>
+      <div class="actions">
+        <span id="status" x-text="status"></span>
+        <select class="btn" x-model="hours" @change="if(!file) loadSample()" aria-label="Hours to forecast">
+          <option value="24">Next 24 hours</option>
+          <option value="48">48 hours</option>
+          <option value="168">7 days</option>
+        </select>
+        <button class="btn" @click="loadSample()">Load sample</button>
+        <label class="btn primary" for="csv" style="cursor:pointer">Upload CSV</label>
+        <input id="csv" type="file" accept=".csv" hidden @change="upload($event)" />
+      </div>
+    </header>
+
+    <div class="banner" role="alert" x-show="data && data.overload_count > 0">
+      ⚠ <span x-text="bannerText"></span>
+    </div>
+
+    <!-- PAGE 1: OVERVIEW -->
+    <section class="page" x-show="route === 'overview'" data-page="overview">
+      <!-- Row 1: KPI Cards -->
+      <div class="grid kpis">
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--blue)"></span>Peak demand</div><div class="value"><span x-text="fmtNum(k.peak)"></span> kW</div><div class="delta" x-text="k.peakAt ? 'at ' + k.peakAt : ''"></div></div>
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--green)"></span>Average demand</div><div class="value"><span x-text="fmtNum(k.avg)"></span> kW</div><div class="delta">across the period</div></div>
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--amber)"></span>Storage-mode hours</div><div class="value"><span x-text="Math.round(k.store || 0)"></span> h</div><div class="delta" x-text="(k.storePct || 0) + '% of hours'"></div></div>
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--red)"></span>Overload alerts</div><div class="value" x-text="Math.round(k.over || 0)"></div><div class="delta">hours ≥ 200 kW</div></div>
+      </div>
+
+      <!-- Row 2: Load Curve + Top Peaks -->
+      <div class="grid two">
+        <div class="card anim">
+          <h3>Load curve <span style="font-size:11px; font-weight:400; color:var(--muted)">Hover points for details</span></h3>
+          <p class="hint">Predicted demand (kW) with 160 kW switching and 200 kW overload thresholds</p>
+          <div class="chart-box"><canvas id="loadChart"></canvas></div>
+        </div>
+        
+        <div class="card anim" style="display:flex; flex-direction:column; justify-content:space-between">
+          <div>
+            <h3>Top peak hours <span class="badge b-alert" x-text="topPeaks.length + ' Recorded'"></span></h3>
+            <p class="hint">Highest forecasted demand hours with threshold offsets</p>
+            <div class="peak-list">
+              <template x-for="r in topPeaks" :key="r.timestamp">
+                <div class="peak-row">
+                  <div class="peak-time">
+                    <span class="dot" :style="'background:' + (r.demand_kw >= 200 ? 'var(--red)' : 'var(--amber)')"></span>
+                    <strong x-text="fmtDate(r.timestamp)"></strong>
+                    <span x-text="'(' + r.mode.replace(' Mode','') + ')'"></span>
+                  </div>
+                  <div class="peak-val">
+                    <span class="peak-kw" x-text="fmtNum(r.demand_kw) + ' kW'"></span>
+                    <span class="peak-over" x-text="'+' + ((r.demand_kw - 200) / 2).toFixed(0) + '% over'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+          
+          <div class="card-summary">
+            <div class="sum-box">
+              <div class="sum-label">Peak Window</div>
+              <div class="sum-val" style="color:#fca5a5">17:00 – 21:00</div>
+            </div>
+            <div class="sum-box">
+              <div class="sum-label">Avg Peak Load</div>
+              <div class="sum-val" style="color:var(--text)" x-text="avgTopPeaks + ' kW'"></div>
+            </div>
+            <div class="sum-box">
+              <div class="sum-label">Switch Strategy</div>
+              <div class="sum-val" style="color:#86efac">Renewable BESS</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Live Dispatch, Battery Gauge, Environmental Context -->
+      <div class="grid three">
+        <!-- Card 3A: Active Microgrid Dispatch -->
+        <div class="card anim">
+          <h3>Active Grid Mode <span class="dot" style="background:var(--green)"></span></h3>
+          <p class="hint">Current switching logic decision</p>
+          <div class="status-badge" :class="currentMode.startsWith('Renewable') ? 'badge-storage' : 'badge-grid'">
+            <span class="status-pulse"></span>
+            <span x-text="currentMode"></span>
+          </div>
+          <div class="metric-row"><span>Switching trigger:</span> <b x-text="currentModeReason"></b></div>
+          <div class="metric-row"><span>Storage load share:</span> <b>30% peak absorption</b></div>
+          <div class="metric-row"><span>Hours in storage:</span> <b x-text="(k.store || 0) + ' / ' + rows.length + ' hrs (' + (k.storePct || 0) + '%)'"></b></div>
+        </div>
+
+        <!-- Card 3B: Battery Storage Status -->
+        <div class="card anim">
+          <h3>Battery Storage (BESS) <span class="dot" style="background:var(--blue)"></span></h3>
+          <p class="hint">500 kWh Utility Battery Pack Status</p>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px">
+            <span style="font-size:24px; font-weight:700" x-text="fmtNum(b.now) + '%'"></span>
+            <span style="font-size:12px; color:var(--muted)" x-text="(b.now * 5).toFixed(0) + ' / 500 kWh'"></span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="'width:' + b.now + '%; background:' + (b.now > 50 ? 'var(--green)' : b.now > 25 ? 'var(--amber)' : 'var(--red)')"></div>
+          </div>
+          <div class="metric-row"><span>Simulation status:</span> <b x-text="b.now > 20 ? 'Active Supply Buffer' : 'Low Charge Floor (10%)'"></b></div>
+          <div class="metric-row"><span>Recharge rate:</span> <b>40 kWh / hr on Main Grid</b></div>
+        </div>
+
+        <!-- Card 3C: Summer Heatwave Context -->
+        <div class="card anim">
+          <h3>Environmental Context <span class="dot" style="background:var(--amber)"></span></h3>
+          <p class="hint">Telemetry driving summer peak demand</p>
+          <div class="metric-row"><span>Ambient Temperature:</span> <b x-text="avgTemp + ' °C (Summer High)'"></b></div>
+          <div class="metric-row"><span>Average Humidity:</span> <b x-text="avgHumidity + ' %'"></b></div>
+          <div class="metric-row"><span>Peak Solar Irradiance:</span> <b x-text="maxSolar + ' W/m²'"></b></div>
+          <div style="font-size:11px; color:var(--muted); margin-top:8px; line-height:1.4">
+            Notice: June heatwaves (~35°C) elevate AC load, causing natural demand surges &gt; 200 kW during afternoon and evening peaks.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 2: GRID MODES -->
+    <section class="page" x-show="route === 'modes'" data-page="modes">
+      <div class="grid even">
+        <div class="card anim">
+          <h3>Grid mode split</h3><p class="hint">Share of hours in each mode</p>
+          <div class="chart-box small"><canvas id="modeChart"></canvas></div>
+        </div>
+        <div class="card anim">
+          <h3>Demand by hour of day</h3><p class="hint">Average predicted kW. Pink bars are the 18–22 evening window.</p>
+          <div class="chart-box small"><canvas id="hourChart"></canvas></div>
+        </div>
+      </div>
+      <div class="card anim">
+        <h3>Hour-of-day mode map</h3><p class="hint">The mode chosen most often for each hour (blue = Main Grid, green = Renewable Storage)</p>
+        <div class="strip">
+          <template x-for="c in modeStrip" :key="c.h">
+            <div :style="'background:' + c.color" :title="c.h + ':00 · ' + c.label" x-text="c.h"></div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 3: BATTERY -->
+    <section class="page" x-show="route === 'battery'" data-page="battery">
+      <div class="grid kpis">
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--green)"></span>Current charge</div><div class="value"><span x-text="fmtNum(b.now)"></span>%</div><div class="delta" x-text="(b.now * 5).toFixed(0) + ' of 500 kWh'"></div></div>
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--red)"></span>Lowest level</div><div class="value"><span x-text="fmtNum(b.min)"></span>%</div><div class="delta">floor is 10%</div></div>
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--amber)"></span>Discharging hours</div><div class="value"><span x-text="Math.round(k.store || 0)"></span> h</div><div class="delta">Storage mode</div></div>
+        <div class="card kpi anim"><div class="label"><span class="dot" style="background:var(--blue)"></span>Charging hours</div><div class="value"><span x-text="Math.round(k.grid || 0)"></span> h</div><div class="delta">Main Grid mode</div></div>
+      </div>
+      <div class="grid two">
+        <div class="card anim">
+          <h3>Battery state of charge</h3><p class="hint">Percent of 500 kWh capacity over time</p>
+          <div class="chart-box"><canvas id="socChart"></canvas></div>
+        </div>
+        <div class="card anim">
+          <h3>Simulation rules</h3><p class="hint">How the battery level is calculated</p>
+          <ul class="rule">
+            <li>Capacity: <b>500 kWh</b></li>
+            <li>Starts at <b>80%</b></li>
+            <li>Storage mode: covers <b>30%</b> of that hour's demand</li>
+            <li>Main Grid mode: charges <b>40 kWh</b> per hour</li>
+            <li>Always kept between <b>10%</b> and <b>100%</b></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 4: LOG -->
+    <section class="page" x-show="route === 'log'" data-page="log">
+      <div class="card anim">
+        <h3>Hourly log</h3><p class="hint">Every forecast row with its mode, alert status and battery level</p>
+        <div class="toolbar">
+          <input class="btn" placeholder="Search time, e.g. 2015-06-17" x-model="search" style="min-width:220px" />
+          <select class="btn" x-model="modeFilter">
+            <option value="all">All modes</option>
+            <option value="store">Renewable Storage</option>
+            <option value="grid">Main Grid</option>
+            <option value="over">Overload only</option>
+          </select>
+          <button class="btn" @click="exportCsv()">Export CSV</button>
+          <span class="sub" style="align-self:center" x-text="filteredRows.length + ' rows'"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Demand</th><th>Mode</th><th>Alert</th><th>Battery</th></tr></thead>
+            <tbody>
+              <template x-for="x in filteredRows" :key="x.timestamp">
+                <tr>
+                  <td x-text="x.timestamp"></td>
+                  <td x-text="fmtNum(x.demand_kw) + ' kW'"></td>
+                  <td><span class="badge" :class="x.mode.startsWith('Renewable') ? 'b-store' : 'b-grid'" x-text="x.mode"></span></td>
+                  <td><span class="badge" :class="x.overload ? 'b-alert' : 'b-ok'" x-text="x.overload ? 'Critical Overload' : 'Normal'"></span></td>
+                  <td><span class="bar"><i :style="'width:' + x.battery_soc + '%;background:' + (x.battery_soc > 50 ? '#22c55e' : x.battery_soc > 25 ? '#f59e0b' : '#ef4444')"></i></span><span x-text="x.battery_soc + '%'"></span></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    Chart.defaults.color = '#8a90a2';
+    Chart.defaults.font.family = 'Inter';
+    Chart.defaults.borderColor = '#1f2330';
+    const charts = {};
+    const fmt = ts => (ts ? ts.slice(5, 16).replace('T', ' ') : '');
+    const fmtDate = ts => {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        const m = d.toLocaleString('en-US', { month: 'short' });
+        const day = d.getDate();
+        const hr = String(d.getHours()).padStart(2, '0') + ':00';
+        return `${m} ${day} · ${hr}`;
+      } catch (e) { return ts.slice(5, 16); }
+    };
+    const isStore = x => (x && x.mode && x.mode.startsWith('Renewable'));
+    function mk(id, cfg) {
+      try {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (charts[id]) { charts[id].destroy(); }
+        charts[id] = new Chart(el, cfg);
+      } catch (err) {
+        console.warn('Chart error for', id, err);
+      }
+    }
+    function grad(id, c1, c2) {
+      try {
+        const el = document.getElementById(id);
+        if (!el) return c1;
+        const g = el.getContext('2d').createLinearGradient(0, 0, 0, 310);
+        g.addColorStop(0, c1); g.addColorStop(1, c2);
+        return g;
+      } catch (e) { return c1; }
+    }
+
+    function app() {
+      return {
+        pages: [
+          { id: 'overview', icon: '▦', label: 'Overview', title: 'Smart Energy Microgrid', sub: 'Demand forecast and real-time operational status' },
+          { id: 'modes', icon: '⇄', label: 'Grid modes', title: 'Grid Modes', sub: 'When the microgrid runs on Main Grid or Renewable Storage' },
+          { id: 'battery', icon: '▮', label: 'Battery', title: 'Battery State of Charge', sub: 'Simulated storage level for the forecast period' },
+          { id: 'log', icon: '☰', label: 'Hourly log', title: 'Hourly Log', sub: 'Search, filter and export every forecast row' },
+        ],
+        route: 'overview', data: null, status: 'Loading…', hours: '24', file: null,
+        k: { peak: 0, peakAt: '', avg: 0, store: 0, storePct: 0, over: 0, grid: 0 },
+        b: { now: 80, min: 10 },
+        search: '', modeFilter: 'all',
+
+        fmtNum(v, d=1) {
+          if (v == null || isNaN(v)) return '0.0';
+          return Number(v).toFixed(d);
+        },
+
+        get current() { return this.pages.find(p => p.id === this.route) || this.pages[0]; },
+        get rows() { return (this.data && this.data.results) ? this.data.results : []; },
+        get topPeaks() { return [...this.rows].sort((a, b) => b.demand_kw - a.demand_kw).slice(0, 5); },
+        get avgTopPeaks() {
+          const tp = this.topPeaks;
+          if (!tp.length) return '0.0';
+          return (tp.reduce((s, r) => s + r.demand_kw, 0) / tp.length).toFixed(1);
+        },
+        get currentMode() {
+          if (!this.rows.length) return 'Main Grid Mode';
+          return this.rows[0].mode || 'Main Grid Mode';
+        },
+        get currentModeReason() {
+          if (!this.rows.length) return 'Standard baseline operation';
+          const r0 = this.rows[0];
+          if (r0.demand_kw > 160 && (r0.hour >= 18 && r0.hour <= 22)) return 'High Demand (>160 kW) & Evening Window';
+          if (r0.demand_kw > 160) return `Demand (${this.fmtNum(r0.demand_kw)} kW) > 160 kW limit`;
+          if (r0.hour >= 18 && r0.hour <= 22) return `Evening peak tariff window (${r0.hour}:00)`;
+          return 'Demand normal (≤160 kW) off-peak';
+        },
+        get avgTemp() {
+          const valid = this.rows.filter(x => x.temp_c != null && x.temp_c > 0);
+          if (!valid.length) return '31.2';
+          return (valid.reduce((s, r) => s + r.temp_c, 0) / valid.length).toFixed(1);
+        },
+        get avgHumidity() {
+          const valid = this.rows.filter(x => x.humidity_pct != null && x.humidity_pct > 0);
+          if (!valid.length) return '55.0';
+          return (valid.reduce((s, r) => s + r.humidity_pct, 0) / valid.length).toFixed(1);
+        },
+        get maxSolar() {
+          const valid = this.rows.map(x => x.solar_wm2 || 0);
+          return valid.length ? Math.max(...valid).toFixed(0) : '0';
+        },
+        get bannerText() {
+          if (!this.data || !this.rows.length) return '';
+          const p = this.topPeaks[0] || this.rows[0];
+          return `Critical Overload Alert: ${this.data.overload_count} hour(s) at or above 200 kW. Peak ${this.fmtNum(p.demand_kw)} kW at ${fmtDate(p.timestamp)}.`;
+        },
+        get filteredRows() {
+          const s = this.search.trim().toLowerCase();
+          return this.rows.filter(x =>
+            (!s || (x.timestamp && x.timestamp.toLowerCase().includes(s))) &&
+            (this.modeFilter === 'all' || (this.modeFilter === 'store' && isStore(x)) ||
+             (this.modeFilter === 'grid' && !isStore(x)) || (this.modeFilter === 'over' && x.overload)));
+        },
+        get modeStrip() {
+          const out = [];
+          for (let h = 0; h < 24; h++) {
+            const rs = this.rows.filter(x => x.hour === h);
+            const st = rs.filter(isStore).length;
+            const storage = rs.length && st >= rs.length / 2;
+            out.push({ h, color: !rs.length ? '#1f2330' : storage ? '#22c55e' : '#2f6bff', label: !rs.length ? 'no data' : storage ? 'Renewable Storage' : 'Main Grid' });
+          }
+          return out;
+        },
+
+        init() {
+          const fromHash = () => {
+            const id = location.hash.replace('#/', '');
+            return this.pages.some(p => p.id === id) ? id : 'overview';
+          };
+          this.route = fromHash();
+          window.addEventListener('hashchange', () => {
+            const id = fromHash();
+            if (id !== this.route) { this.go(id, true); }
+          });
+          this.loadSample();
+        },
+
+        async go(id, fromHash = false) {
+          if (id === this.route) return;
+          if (!fromHash) location.hash = '#/' + id;
+          this.route = id;
+          await this.$nextTick();
+          this.renderPage();
+        },
+
+        computeStats() {
+          const r = this.rows;
+          if (!r.length) return;
+          const d = r.map(x => x.demand_kw), peak = Math.max(...d);
+          const store = r.filter(isStore).length;
+          this.k.peak = peak;
+          this.k.avg = d.reduce((a, c) => a + c, 0) / d.length;
+          this.k.store = store;
+          this.k.over = this.data.overload_count || 0;
+          this.k.peakAt = fmtDate(r[d.indexOf(peak)].timestamp);
+          this.k.storePct = Math.round(store / r.length * 100);
+          this.k.grid = r.length - store;
+          this.b.now = r[0] ? r[0].battery_soc : 80;
+          this.b.min = Math.min(...r.map(x => x.battery_soc));
+        },
+
+        renderPage() {
+          const r = this.rows;
+          if (!r.length) return;
+          const labels = r.map(x => fmt(x.timestamp)), d = r.map(x => x.demand_kw);
+
+          if (this.route === 'overview') {
+            mk('loadChart', {
+              type: 'line',
+              data: {
+                labels,
+                datasets: [
+                  {
+                    label: 'Demand (kW)',
+                    data: d,
+                    borderColor: '#2f6bff',
+                    backgroundColor: grad('loadChart', 'rgba(47,107,255,.45)', 'rgba(47,107,255,0)'),
+                    fill: true,
+                    tension: .38,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    pointHoverBackgroundColor: '#2f6bff',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                    borderWidth: 2.5
+                  },
+                  {
+                    label: '160 kW (Switching Threshold)',
+                    data: d.map(() => 160),
+                    borderColor: '#f59e0b',
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    borderWidth: 1.6
+                  },
+                  {
+                    label: '200 kW (Critical Overload)',
+                    data: d.map(() => 200),
+                    borderColor: '#ef4444',
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    borderWidth: 1.8
+                  },
+                ]
+              },
+              options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                  x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
+                  y: { grid: { color: 'rgba(31,35,48,.6)' }, ticks: { callback: v => v + ' kW' } }
+                },
+                plugins: {
+                  legend: {
+                    position: 'top',
+                    labels: { boxWidth: 12, usePointStyle: true, padding: 15 }
+                  },
+                  tooltip: {
+                    backgroundColor: '#141722',
+                    titleColor: '#f2f4f8',
+                    bodyColor: '#8a90a2',
+                    borderColor: '#1f2330',
+                    borderWidth: 1,
+                    padding: 10,
+                    callbacks: {
+                      label: ctx => ` Demand: ${ctx.parsed.y.toFixed(1)} kW`,
+                      afterLabel: ctx => {
+                        const item = r[ctx.dataIndex];
+                        return ` Mode: ${item.mode}\n Status: ${item.overload ? 'CRITICAL OVERLOAD (≥200 kW)' : 'Normal'}\n Battery: ${item.battery_soc}%`;
+                      }
+                    }
+                  }
+                }
+              }
+            });
+          }
+          if (this.route === 'modes') {
+            const store = r.filter(isStore).length;
+            mk('modeChart', { type: 'doughnut', data: { labels: ['Main Grid', 'Renewable Storage'], datasets: [{ data: [r.length - store, store], backgroundColor: ['#2f6bff', '#22c55e'], borderWidth: 0 }] },
+              options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } } } } });
+            const sums = Array(24).fill(0), cnt = Array(24).fill(0);
+            r.forEach(x => { sums[x.hour] += x.demand_kw; cnt[x.hour]++; });
+            mk('hourChart', { type: 'bar', data: { labels: [...Array(24).keys()].map(h => h + 'h'), datasets: [{ data: sums.map((s, i) => cnt[i] ? +(s / cnt[i]).toFixed(1) : 0), backgroundColor: [...Array(24).keys()].map(h => h >= 18 && h <= 22 ? '#ec4899' : '#2f6bff'), borderRadius: 4 }] },
+              options: { maintainAspectRatio: false, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } } }, plugins: { legend: { display: false } } } });
+          }
+          if (this.route === 'battery') {
+            mk('socChart', { type: 'line', data: { labels, datasets: [{ label: 'Battery %', data: r.map(x => x.battery_soc), borderColor: '#22c55e', backgroundColor: grad('socChart', 'rgba(34,197,94,.4)', 'rgba(34,197,94,0)'), fill: true, tension: .35, pointRadius: 0, borderWidth: 2.5 }] },
+              options: { maintainAspectRatio: false, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } }, x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } } }, plugins: { legend: { display: false } } } });
+          }
+        },
+
+        async fetchData(promise) {
+          this.status = 'Forecasting…';
+          try {
+            const res = await promise, j = await res.json();
+            if (!res.ok) throw new Error(j.error || 'Request failed');
+            this.data = j;
+            this.computeStats();
+            await this.$nextTick();
+            this.renderPage();
+            this.status = `${j.count} rows · updated ${new Date().toLocaleTimeString()}`;
+          } catch (e) { this.status = 'Error: ' + e.message; }
+        },
+        loadSample() { this.file = null; return this.fetchData(fetch('/api/sample?n=' + this.hours)); },
+        upload(e) {
+          const f = e.target.files[0]; if (!f) return;
+          this.file = f;
+          const fd = new FormData(); fd.append('file', f);
+          this.fetchData(fetch('/api/forecast', { method: 'POST', body: fd }));
+        },
+        exportCsv() {
+          const head = 'timestamp,demand_kw,mode,overload,battery_soc';
+          const body = this.filteredRows.map(x => [x.timestamp, x.demand_kw, x.mode, x.overload, x.battery_soc].join(',')).join('\n');
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([head + '\n' + body], { type: 'text/csv' }));
+          a.download = 'microgrid_forecast.csv'; a.click();
+        },
+      };
+    }
+  </script>
+</body>
+</html>
